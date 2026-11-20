@@ -127,6 +127,7 @@ async function writeStateToTables(data: Record<string, unknown>): Promise<void> 
   const rows = toTableRows(state)
 
   // Replace all data atomically so a failed save never leaves a half-written store.
+  // Large catalogs need longer than Prisma's default 5s interactive transaction timeout.
   await prisma.$transaction(async (tx: Record<string, any>) => {
     await tx.saleItem.deleteMany({})
     await tx.sale.deleteMany({})
@@ -158,7 +159,7 @@ async function writeStateToTables(data: Record<string, unknown>): Promise<void> 
         create: { id: 'singleton', ...rows.settings },
       })
     }
-  })
+  }, { maxWait: 10000, timeout: 60000 })
 
   // Keep legacy StoreState in sync for rollback
   try {
