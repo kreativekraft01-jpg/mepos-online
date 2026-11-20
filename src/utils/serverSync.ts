@@ -1,6 +1,5 @@
-import { useStore, DEFAULT_SETTINGS } from '../store/useStore'
+import { useStore } from '../store/useStore'
 import { useAuthStore } from '../store/authStore'
-import { seedCategories, seedProducts, seedCustomers, seedKnowledge, seedSkills, seedTills } from '../store/seed'
 
 /**
  * Server synchronisation.
@@ -58,7 +57,7 @@ export type Snapshot = Record<string, unknown> & {
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
 
-/** Build the exact payload we send to `PUT /api/state` from the store. */
+/** Build the exact payload we send to `PUT /api/client/state` from the store. */
 export function snapshotOf(state: Record<string, unknown>): Snapshot {
   const out: Record<string, unknown> = {}
   for (const key of SNAPSHOT_KEYS) out[key] = state[key]
@@ -80,41 +79,19 @@ export function storePatchFromSnapshot(data: Snapshot): Record<string, unknown> 
   return patch
 }
 
-export const DIRTY_KEY = 'mepos-sync-dirty'
-export const BASELINE_KEY = 'mepos-sync-baseline'
+// Neon is authoritative. Sync state lives only in this module's in-memory
+// controller; nothing about the store is persisted in the browser.
 
 function readDirty(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(DIRTY_KEY) === '1'
-  } catch {
-    return false
-  }
+  return false
 }
 
-function writeDirty(dirty: boolean) {
-  try {
-    if (typeof localStorage === 'undefined') return
-    if (dirty) localStorage.setItem(DIRTY_KEY, '1')
-    else localStorage.removeItem(DIRTY_KEY)
-  } catch {
-    /* storage blocked — in-memory flag still works */
-  }
+function writeDirty(_dirty: boolean) {
+  // Intentionally empty — no browser-side sync state.
 }
 
-function readBaseline(): string | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage.getItem(BASELINE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeBaseline(value: string) {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(BASELINE_KEY, value)
-  } catch {
-    /* ignore */
-  }
+function writeBaseline(_value: string) {
+  // Intentionally empty — no browser-side sync state.
 }
 
 /** Stable content key: ids/timestamps change per page load and do not signal an edit. */
@@ -134,47 +111,6 @@ export function fingerprint(snapshot: Snapshot): string {
   let hash = 5381
   for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0
   return `${text.length}:${hash.toString(16)}`
-}
-
-/**
- * True when the local store is still the untouched demo seed — a brand-new
- * device that should adopt the server copy instead of overwriting it.
- */
-export function isPristineStore(snapshot: Snapshot): boolean {
-  if (!snapshot.settings) return false
-  const userSettings = ['storeName', 'tagline', 'currency', 'taxRate', 'receiptFooter', 'aiEnabled', 'kbEnabled', 'skillsEnabled'] as const
-  for (const key of userSettings) {
-    if (JSON.stringify((snapshot.settings as Record<string, unknown>)[key]) !== JSON.stringify(DEFAULT_SETTINGS[key])) return false
-  }
-  const same = (local: unknown, seed: unknown) => contentKey(local) === contentKey(seed)
-  return (
-    same(snapshot.categories, seedCategories) &&
-    same(snapshot.products, seedProducts) &&
-    same(snapshot.customers, seedCustomers) &&
-    same(snapshot.knowledge, seedKnowledge) &&
-    same(snapshot.skills, seedSkills) &&
-    same(snapshot.tills, seedTills) &&
-    Array.isArray(snapshot.vouchers) &&
-    snapshot.vouchers.length === 0 &&
-    Array.isArray(snapshot.savedCarts) &&
-    snapshot.savedCarts.length === 0 &&
-    snapshot.activeTillId == null
-  )
-}
-
-/**
- * Decide whether the local copy must be pushed at startup.
- *
- * - A stored dirty flag always wins.
- * - With a baseline, any content change since the last sync is unsaved work.
- * - Without a baseline (first load after upgrading from an older client) a
- *   pristine demo store adopts the server copy; a store with real local edits
- *   is pushed so the data users reported as "not saving" is not overwritten.
- */
-export function needsPushOnStart(options: { snapshot: Snapshot; baseline: string | null; dirty: boolean }): boolean {
-  if (options.dirty) return true
-  if (options.baseline != null) return fingerprint(options.snapshot) !== options.baseline
-  return !isPristineStore(options.snapshot)
 }
 
 export interface SyncDeps {
@@ -332,11 +268,11 @@ export class ServerSync {
         return true
       }
 
-      // No server data yet, or this device has unsaved edits: push local state.
-      this.setStatus('syncing')
-      const ok = await this.save(token)
-      if (ok) this.deps.onError?.(null)
-      return ok
+      // Neon is the only source of truth. Never push an empty or stale browser
+      // snapshot over a missing/invalid server response.
+      this.setStatus('offline')
+      this.deps.onError?.('Server data is unavailable — refresh and try again.')
+      return false
     } catch {
       // Offline / cold start: keep sync enabled so edits retry on the next save.
       this.active = true
@@ -455,7 +391,7 @@ function envApiBase(): string {
 }
 
 function stateUrlFor(base: string): string {
-  return `${base}/api/state`.replace('//api', '/api')
+  return `${base}/api/client/state`.replace('//api', '/api')
 }
 
 const API = envApiBase()
@@ -493,12 +429,6 @@ function reportError(message: string | null) {
 
 const localSnapshot = () => snapshotOf(useStore.getState() as unknown as Record<string, unknown>)
 
-const initialDirty = needsPushOnStart({
-  snapshot: localSnapshot(),
-  baseline: readBaseline(),
-  dirty: readDirty(),
-})
-
 const singleton = new ServerSync({
   stateUrl: stateUrlFor(API),
   getToken: () => useAuthStore.getState().token,
@@ -507,14 +437,17 @@ const singleton = new ServerSync({
       if (state.token !== previous.token) fn(state.token)
     }),
   getSnapshot: localSnapshot,
-  applySnapshot: (snapshot) => useStore.setState(storePatchFromSnapshot(snapshot) as never),
+  applySnapshot: (snapshot) => {
+    useStore.setState(storePatchFromSnapshot(snapshot) as never)
+    useStore.getState().hydrated()
+  },
   // Ignore non-persisted state changes (toasts, cart, current page) so a mere
   // notification does not mark the whole store as having unsaved edits.
   subscribeStore: (fn) =>
     useStore.subscribe((state, previous) => {
       if (SNAPSHOT_KEYS.some((key) => state[key] !== previous[key])) fn()
     }),
-  isDirty: () => initialDirty,
+  isDirty: () => false,
   setDirty: (dirty) => {
     writeDirty(dirty)
     // Remember exactly what the server has so the next load can tell whether

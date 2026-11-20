@@ -20,7 +20,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: { legacy: 'index.html', online: 'online.html' },
+      input: { legacy: 'index.html' },
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],

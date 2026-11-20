@@ -204,6 +204,43 @@ app.post('/api/auth/logout', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Authoritative store for the full client UI. The browser keeps no persisted
+// copy: it reads this snapshot after login and writes it back after every edit.
+app.get('/api/client/state', authMiddleware, async (_req, res) => {
+  try {
+    const data = await readStateFromTables()
+    if (data) return res.json({ data })
+    const row = await prisma.storeState.findUnique({ where: { id: 'singleton' } })
+    return res.json({ data: row?.data ?? null })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Failed to load state' })
+  }
+})
+
+app.put('/api/client/state', authMiddleware, async (req, res) => {
+  const data = req.body
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    return res.status(400).json({ error: 'Invalid body' })
+  const state = normalizeState(data)
+  try {
+    await writeStateToTables(data as Record<string, unknown>)
+    return res.json({
+      ok: true,
+      counts: {
+        categories: state.categories.length,
+        products: state.products.length,
+        customers: state.customers.length,
+        sales: state.sales.length,
+        knowledge: state.knowledge.length,
+      },
+    })
+  } catch (e) {
+    console.error('[server] Failed to save client state:', e)
+    res.status(500).json({ error: 'Failed to save state', detail: (e as Error).message })
+  }
+})
+
 if (online) {
   app.use(['/api/state', '/api/backup'], (_req, res) => {
     res.status(409).json({ error: 'Whole-store sync is disabled in online mode.' })
@@ -283,13 +320,17 @@ for (const c of candidates) {
 }
 if (staticDir) {
   console.log('[server] Serving static from', staticDir)
-  const entry = path.join(staticDir, online ? 'online.html' : 'index.html')
-  app.get(['/', '/online.html', '/index.html'], (_req, res) => res.set('Cache-Control','no-store').sendFile(entry))
+  // Full store UI (including the AI assistant) is the only app in every mode.
+  // The old register never stores business data in the browser and is not built.
+  const entry = path.join(staticDir, 'index.html')
+  const noStore = (_req: import('express').Request, res: import('express').Response) =>
+    res.set('Cache-Control', 'no-store').sendFile(entry)
+  app.get('/', noStore)
+  app.get('/index.html', noStore)
+  app.get('/online.html', noStore)
   app.use(express.static(staticDir))
   // HashRouter needs no rewrite, but handle direct /admin/* etc. fallback to index.html for BrowserRouter safety
-  app.get('*', (_req, res) => {
-    res.set('Cache-Control','no-store').sendFile(entry)
-  })
+  app.get('*', noStore)
 } else {
   console.log('[server] No static dist found — API only mode. Run `npm run build` in pos-app first.')
   app.get('/', (_req, res) => res.send('MEPoS API running — build frontend with `npm run build` to serve UI'))

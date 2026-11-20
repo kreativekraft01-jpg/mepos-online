@@ -1,10 +1,8 @@
 import { transactionFigures, todaysTransactions } from '../utils/figures'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Category, Product, Customer, Sale, Settings, Toast, CartItem, SavedCart, PaymentSplit, KnowledgeDoc, AiSkill, BankingContext, Till, GiftVoucher } from '../types'
 import { uid, tillExpectedCash, formatMoney } from '../utils/format'
-import { seedCategories, seedProducts, seedCustomers, buildSeedSales, seedKnowledge, seedSkills, seedTills } from './seed'
-import { DEFAULT_BROWSER_MODEL, normalizeModelId } from '../utils/browserLlm'
+import { DEFAULT_BROWSER_MODEL } from '../utils/browserLlm'
 
 export const STORE_VERSION = 16
 
@@ -79,21 +77,6 @@ interface POSState {
   pushToast: (type: Toast['type'], message: string) => void
   dismissToast: (id: string) => void
   updateSettings: (patch: Partial<Settings>) => void
-  resetDemoData: () => void
-}
-
-function seedAll() {
-  const products = seedProducts
-  const customers = seedCustomers
-  const sales = buildSeedSales(products, customers)
-  return { products, customers, sales }
-}
-
-function refreshSeed(state: POSState) {
-  const s = seedAll()
-  state.products = s.products
-  state.customers = s.customers
-  state.sales = s.sales
 }
 
 /** Today's sales-floor figures for the MEPoS home page. */
@@ -114,19 +97,19 @@ export function nextReceiptNo(sales: Sale[]): string {
   return String(highest + 1)
 }
 
-export const useStore = create<POSState>()(
-  persist(
-    (set, get) => ({
+// Neon is authoritative: the browser store starts empty and is populated only
+// from GET /api/client/state after login. No zustand persist, no seed fallback.
+export const useStore = create<POSState>()((set, get) => ({
       ready: false,
-      categories: seedCategories,
-      products: seedProducts,
-      customers: seedCustomers,
-      sales: buildSeedSales(seedProducts, seedCustomers),
+      categories: [],
+      products: [],
+      customers: [],
+      sales: [],
       vouchers: [],
-      knowledge: seedKnowledge,
-      skills: seedSkills,
+      knowledge: [],
+      skills: [],
       bankingContext: null,
-      tills: seedTills,
+      tills: [],
       activeTillId: undefined,
       cart: [],
       savedCarts: [],
@@ -618,80 +601,4 @@ export const useStore = create<POSState>()(
       dismissToast: (id) => set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })),
 
       updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
-
-      resetDemoData: () =>
-        set(() => {
-          const s = seedAll()
-          return {
-            categories: seedCategories,
-            products: s.products,
-            customers: s.customers,
-            sales: s.sales,
-            vouchers: [],
-            knowledge: seedKnowledge,
-            skills: seedSkills,
-            tills: seedTills,
-            activeTillId: undefined,
-            cart: [],
-            discount: 0,
-            customerId: undefined
-          }
-        })
-    }),
-    {
-      name: 'nova-pos',
-      version: STORE_VERSION,
-      partialize: (st) => ({
-        categories: st.categories,
-        products: st.products,
-        customers: st.customers,
-        sales: st.sales,
-        vouchers: st.vouchers,
-        knowledge: st.knowledge,
-        skills: st.skills,
-        tills: st.tills,
-        activeTillId: st.activeTillId,
-        savedCarts: st.savedCarts,
-        settings: st.settings
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.hydrated()
-        }
-      },
-      migrate: (persisted: unknown, version) => {
-        if ((version as number) < 14) {
-          const p = (persisted || {}) as Partial<POSState>
-          const old = p.settings as (Settings & { ollamaBaseUrl?: string; ollamaModel?: string }) | undefined
-          const { ollamaBaseUrl: _url, ollamaModel: _model, ...rest } = old ?? {}
-          const normalized: Settings = { ...DEFAULT_SETTINGS, ...rest }
-          normalized.browserModel = normalizeModelId(normalized.browserModel)
-          const fresh = seedAll()
-          return {
-            categories: seedCategories,
-            products: fresh.products,
-            customers: fresh.customers,
-            sales: fresh.sales,
-            vouchers: [],
-            knowledge: seedKnowledge,
-            skills: seedSkills,
-            tills: seedTills,
-            activeTillId: undefined,
-            savedCarts: [],
-            settings: normalized
-          }
-        }
-        if ((version as number) < 16) {
-          const p = (persisted || {}) as Partial<POSState>
-          // Strip removed soundEnabled field — feature deleted
-          const s = p.settings as unknown as Record<string, unknown> | undefined
-          if (s && 'soundEnabled' in s) delete s.soundEnabled
-          return { ...(p as POSState), settings: { ...DEFAULT_SETTINGS, ...(s as unknown as Settings) } } as POSState
-        }
-        return persisted as POSState
-      }
-    }
-  )
-)
-
-export { refreshSeed }
+}))

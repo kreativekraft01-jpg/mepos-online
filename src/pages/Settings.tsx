@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, RotateCcw, Store, Receipt, Bot, BookOpen, Zap, Plus, Pencil, Trash2, Download, Cpu, CheckCircle2, AlertTriangle, RefreshCw, HardDrive, Upload } from 'lucide-react'
+import { Save, Store, Receipt, Bot, BookOpen, Zap, Plus, Pencil, Trash2, Download, Cpu, CheckCircle2, AlertTriangle, RefreshCw, HardDrive, Upload } from 'lucide-react'
 import { useStore, DEFAULT_SETTINGS } from '../store/useStore'
 import { useBrowserAi, isModelCached } from '../store/browserAi'
 import { BROWSER_MODELS, browserModelLabel, isWebGpuSupported, normalizeModelId } from '../utils/browserLlm'
@@ -15,11 +15,9 @@ export default function SettingsPage() {
   const settings = useStore((s) => s.settings)
   const knowledge = useStore((s) => s.knowledge)
   const updateSettings = useStore((s) => s.updateSettings)
-  const resetDemoData = useStore((s) => s.resetDemoData)
   const pushToast = useStore((s) => s.pushToast)
 
   const [form, setForm] = useState({ ...settings })
-  const [confirmReset, setConfirmReset] = useState(false)
   const [docModal, setDocModal] = useState<KnowledgeDoc | 'new' | null>(null)
   const [deletingDoc, setDeletingDoc] = useState<KnowledgeDoc | null>(null)
   const [skillModal, setSkillModal] = useState<AiSkill | 'new' | null>(null)
@@ -141,22 +139,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <Receipt size={18} style={{ color: 'var(--warning)' }} />
-          <h3>Danger zone</h3>
-        </div>
-        <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13.5 }}>Reset demo data</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>Restore products, customers, sample sales and the knowledge base to the original demo state.</div>
-          </div>
-          <button className="btn btn-danger" onClick={() => setConfirmReset(true)}>
-            <RotateCcw size={15} /> Reset
-          </button>
-        </div>
-      </div>
-
       {docModal && (
         <DocModal doc={docModal === 'new' ? null : docModal} onClose={() => setDocModal(null)} />
       )}
@@ -193,18 +175,6 @@ export default function SettingsPage() {
         }}
       />
 
-      <ConfirmDialog
-        open={confirmReset}
-        title="Reset demo data?"
-        message="This replaces products, customers, sales and the knowledge base with fresh demo data. Your settings are kept."
-        confirmLabel="Reset data"
-        onCancel={() => setConfirmReset(false)}
-        onConfirm={() => {
-          resetDemoData()
-          pushToast('success', 'Demo data restored')
-          setConfirmReset(false)
-        }}
-      />
     </div>
   )
 }

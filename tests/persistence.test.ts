@@ -24,12 +24,11 @@ function installStorage() {
 }
 installStorage()
 
-const { useStore, nextReceiptNo, DEFAULT_SETTINGS } = await import('../src/store/useStore')
-const { snapshotOf, isValidSnapshot, storePatchFromSnapshot, ServerSync, fingerprint, isPristineStore, needsPushOnStart } = await import('../src/utils/serverSync')
+const { useStore, nextReceiptNo } = await import('../src/store/useStore')
+const { snapshotOf, isValidSnapshot, storePatchFromSnapshot, ServerSync, fingerprint } = await import('../src/utils/serverSync')
 const { parseKnowledgeFile } = await import('../src/utils/knowledgeFile')
 const { retrieveKnowledge } = await import('../src/utils/rag')
 const { normalizeState, toTableRows } = await import('../server/src/state')
-const { seedCategories, seedProducts, seedCustomers, seedKnowledge, seedSkills, seedTills } = await import('../src/store/seed')
 import type { Snapshot } from '../src/utils/serverSync'
 import type { Sale, KnowledgeDoc } from '../src/types'
 
@@ -47,23 +46,6 @@ function emptySnapshot(): Snapshot {
     activeTillId: undefined,
     savedCarts: [],
     settings: { storeName: 'Test', currency: '$' },
-  } as unknown as Snapshot
-}
-
-/** The untouched demo store a brand-new browser starts with. */
-function pristineSnapshot(): Snapshot {
-  return {
-    categories: seedCategories,
-    products: seedProducts,
-    customers: seedCustomers,
-    sales: [],
-    vouchers: [],
-    knowledge: seedKnowledge,
-    skills: seedSkills,
-    tills: seedTills,
-    activeTillId: null,
-    savedCarts: [],
-    settings: { ...DEFAULT_SETTINGS },
   } as unknown as Snapshot
 }
 
@@ -262,6 +244,11 @@ test('receipt numbers use the highest existing number, not the array length', ()
 
 // ── 2. Store edits end up in the synced payload ─────────────────────────────
 test('customer and product add/update are present in the server payload', () => {
+  useStore.setState({
+    categories: [{ id: 'cat-test', name: 'Phones', color: '#6366f1' }],
+    customers: [],
+    products: [],
+  })
   const store = useStore.getState()
   const startingCustomers = store.customers.length
 
@@ -314,43 +301,17 @@ test('snapshot validation rejects non-store payloads', () => {
 })
 
 // ── 3. Sync lifecycle (the reported "changes disappear" bugs) ───────────────
-test('a pristine demo store adopts the server copy, a store with edits is pushed', () => {
-  const pristine = pristineSnapshot()
-  assert.equal(isPristineStore(pristine), true, 'untouched seed data is recognised')
-  assert.equal(needsPushOnStart({ snapshot: pristine, baseline: null, dirty: false }), false)
-
-  const edited = {
-    ...pristine,
-    customers: [...(pristine.customers as unknown[]), { id: 'local-1', name: 'Lakshmi', balance: 5 }],
-  } as unknown as Snapshot
-  assert.equal(isPristineStore(edited), false)
-  assert.equal(
-    needsPushOnStart({ snapshot: edited, baseline: null, dirty: false }),
-    true,
-    'edits made before the upgrade must be pushed, not replaced by the server copy'
-  )
-})
-
-test('a baseline detects edits made since the last successful sync', () => {
-  const pristine = pristineSnapshot()
-  const baseline = fingerprint(pristine)
-  assert.equal(needsPushOnStart({ snapshot: pristine, baseline, dirty: false }), false)
-  const edited = { ...pristine, settings: { ...DEFAULT_SETTINGS, storeName: 'Renamed' } } as unknown as Snapshot
-  assert.equal(needsPushOnStart({ snapshot: edited, baseline, dirty: false }), true)
-  assert.equal(needsPushOnStart({ snapshot: pristine, baseline, dirty: true }), true)
-})
-
 test('fingerprints ignore ids and timestamps', () => {
   const a = fingerprint({ products: [{ id: 'a', name: 'Phone', createdAt: 1 }], customers: [] } as unknown as Snapshot)
   const b = fingerprint({ products: [{ id: 'b', name: 'Phone', createdAt: 999 }], customers: [] } as unknown as Snapshot)
   assert.equal(a, b)
 })
 
-test('logging in after load starts sync and pushes earlier offline edits', async () => {
+test('login adopts the server copy and never pushes stale browser data', async () => {
   const remote = emptySnapshot()
   ;(remote.customers as unknown[]) = [{ id: 'old', name: 'Old server customer' }]
 
-  const h = harness({ token: null, dirty: true, get: () => jsonResponse({ data: remote }) })
+  const h = harness({ token: null, dirty: false, get: () => jsonResponse({ data: remote }) })
   h.mutate({ customers: [{ id: 'new', name: 'Lakshmi', phone: '', email: '', balance: 0, notes: '', createdAt: 1 }] })
   h.sync.start()
   await tick()
@@ -362,10 +323,8 @@ test('logging in after load starts sync and pushes earlier offline edits', async
   await tick()
 
   assert.equal(h.calls[0].method, 'GET')
-  assert.equal(h.calls[1]?.method, 'PUT', 'unsaved local edits must be pushed after login')
-  assert.equal((h.calls[1].headers as Record<string, string>).Authorization, 'Bearer jwt-token')
-  const pushed = h.calls[1].body as { customers: { id: string }[] }
-  assert.ok(pushed.customers.some((c) => c.id === 'new'), 'new customer is not overwritten by server state')
+  assert.equal(h.calls[1]?.method, undefined, 'stale local data must not overwrite Neon')
+  assert.deepEqual(h.snapshot.customers, remote.customers)
   assert.equal(h.dirty, false)
 })
 
@@ -475,17 +434,17 @@ test('a 401 response does not enable saving with an invalid session', async () =
 })
 
 test('logging out flushes pending edits with the previous token', async () => {
-  const h = harness({ token: 'jwt', dirty: false, get: () => jsonResponse({ data: null }) })
+  const h = harness({ token: 'jwt', dirty: false, get: () => jsonResponse({ data: emptySnapshot() }) })
   h.sync.start()
   await tick()
-  assert.equal(h.putCount(), 1, 'empty server is seeded with local state')
+  assert.equal(h.putCount(), 0, 'Neon is never seeded from browser state')
 
   h.mutate({ customers: [{ id: 'c9', name: 'Before logout' }] })
   h.change()
   h.login(null)
   await tick()
 
-  assert.equal(h.putCount(), 2)
+  assert.equal(h.putCount(), 1)
   assert.equal((h.calls.at(-1)?.headers as Record<string, string>).Authorization, 'Bearer jwt')
 })
 
