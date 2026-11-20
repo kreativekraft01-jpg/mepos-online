@@ -1,0 +1,101 @@
+:root {
+  font:
+    16px/1.5 Inter,
+    system-ui,
+    sans-serif;
+  color: #152a31;
+  background: #f5f7f7;
+}
+* {
+  box-sizing: border-box;
+}
+main {
+  max-width: 1120px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+header,
+li,
+.bar,
+nav {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+header,
+li {
+  justify-content: space-between;
+}
+h1,
+h2 {
+  margin: 0.4rem 0;
+}
+section,
+.login {
+  background: white;
+  border: 1px solid #d2dbdc;
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 1rem;
+}
+.login {
+  max-width: 400px;
+}
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #b5c3c5;
+  border-radius: 5px;
+  background: white;
+}
+input {
+  display: block;
+  width: 100%;
+  margin: 0.65rem 0;
+}
+button {
+  cursor: pointer;
+}
+button[aria-pressed='true'],
+form button {
+  background: #184955;
+  color: white;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+ul {
+  list-style: none;
+  padding: 0;
+}
+li {
+  border-bottom: 1px solid #dde5e6;
+  padding: 0.55rem 0;
+}
+small {
+  display: block;
+  color: #48616b;
+}
+@media (max-width: 680px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+details {
+  margin: 1rem 0;
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.lookup-result {
+  white-space: pre-line;
+}
