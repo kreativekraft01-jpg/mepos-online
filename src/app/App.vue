@@ -166,7 +166,7 @@
       </div>
     </div>
 
-    <Toaster position="top-right" theme="dark" rich-colors />
+    <Toaster position="top-right" :theme="theme" rich-colors />
   </div>
 </template>
 
@@ -225,11 +225,15 @@ const selectedOrderId = ref<string | null>(null)
 const refundDetails = ref<{ amount: number; method: string; reason: string; receiptOptions: { print: boolean; email: boolean }; orderId: string; items?: any[] } | null>(null)
 
 const theme = ref<'dark' | 'light'>('dark')
-function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  document.documentElement.classList.toggle('dark', theme.value === 'dark')
+function applyTheme(next: 'dark' | 'light') {
+  theme.value = next
+  document.documentElement.classList.toggle('dark', next === 'dark')
+  document.documentElement.classList.toggle('light', next === 'light')
 }
-onMounted(() => { document.documentElement.classList.toggle('dark', theme.value === 'dark') })
+function toggleTheme() {
+  applyTheme(theme.value === 'dark' ? 'light' : 'dark')
+}
+onMounted(() => { applyTheme(theme.value) })
 
 const activeTill = computed(() => store.tills.find((t) => t.id === store.activeTillId) || store.tills.find((t) => t.status === 'open'))
 
