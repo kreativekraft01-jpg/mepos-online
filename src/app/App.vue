@@ -259,11 +259,11 @@ const unprocessedTransactions = computed<Transaction[]>(() => {
 })
 
 // auto open banking when none open
-watch([() => store.ready, () => store.tills], () => {
+watch([() => store.ready, () => store.tills, () => currentPage.value], () => {
   if (!store.ready) return
   const open = store.tills.find((t) => t.status === 'open')
   if (!open) {
-    showOpenBanking.value = true
+    if (currentPage.value === 'home') showOpenBanking.value = true
     currentFloat.value = null
   } else {
     currentFloat.value = { amount: open.openingFloat, name: open.name }

@@ -2,74 +2,118 @@
   <Teleport to="body">
     <Transition enter-active-class="transition duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
       <div v-if="isOpen" class="fixed inset-0 z-[200]">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="$emit('close')"></div>
-        <aside class="absolute left-0 top-0 bottom-0 w-[340px] max-w-[90vw] bg-card border-r border-border shadow-2xl flex flex-col">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @click="$emit('close')"></div>
+        <aside class="absolute left-0 top-0 bottom-0 w-80 max-w-[90vw] bg-sidebar border-r border-sidebar-border shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col">
           <!-- Header -->
-          <div class="p-4 border-b border-border">
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="w-10 h-10 bg-primary/20 flex items-center justify-center rounded-none border border-primary/30 shrink-0">
-                  <Building2 class="w-5 h-5 text-primary" />
-                </div>
-                <div class="min-w-0">
-                  <div class="font-bold text-sm truncate">{{ currentBranch }}</div>
-                  <div class="text-xs text-muted-foreground truncate">{{ currentFloat?.name || 'No till open' }}</div>
-                </div>
-              </div>
-              <button class="p-2 hover:bg-muted rounded-none" @click="$emit('close')"><X class="w-5 h-5" /></button>
+          <div class="bg-sidebar text-sidebar-foreground p-6 flex items-center justify-between border-b border-sidebar-border shrink-0">
+            <div class="text-2xl font-black italic tracking-tighter text-sidebar-foreground relative">
+              ME<span class="text-primary drop-shadow-[0_0_10px_rgba(219,115,55,0.5)]">PoS</span>
+              <div class="absolute -bottom-1 right-0 w-8 h-0.5 bg-primary/50"></div>
             </div>
-
-            <!-- Branch selector -->
-            <div class="relative">
-              <button @click="branchOpen = !branchOpen" class="w-full flex items-center justify-between px-3 py-2 bg-background border border-border hover:border-primary/40 text-sm">
-                <span class="truncate">{{ currentBranch }}</span>
-                <ChevronDown class="w-4 h-4 text-muted-foreground" :class="branchOpen ? 'rotate-180' : ''" />
-              </button>
-              <div v-if="branchOpen" class="absolute z-20 mt-1 w-full bg-card border border-border shadow-xl max-h-48 overflow-auto">
-                <button v-for="b in branches" :key="b" @click="selectBranch(b)" class="w-full text-left px-3 py-2 text-sm hover:bg-muted" :class="b === currentBranch ? 'text-primary' : ''">
-                  {{ b }}
-                </button>
-              </div>
-            </div>
+            <button @click="$emit('close')" class="p-2 hover:bg-sidebar-accent rounded-none transition-colors group">
+              <X class="w-6 h-6 text-muted-foreground group-hover:text-sidebar-foreground transition-transform group-hover:rotate-90" />
+            </button>
           </div>
 
-          <!-- Nav -->
-          <nav class="flex-1 p-3 space-y-1 overflow-auto">
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-left" @click="goHome">
-              <Home class="w-5 h-5" /><span>POS Home</span>
-            </button>
-            <router-link to="/admin/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-foreground" @click="$emit('close')">
-              <Settings class="w-5 h-5" /><span>Settings / Admin</span>
-            </router-link>
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-left" @click="$emit('close-banking')">
-              <DollarSign class="w-5 h-5" /><span>Close Banking</span>
-            </button>
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-left" @click="$emit('toggle-theme')">
-              <component :is="theme === 'dark' ? Sun : Moon" class="w-5 h-5" />
-              <span>{{ theme === 'dark' ? 'Light mode' : 'Dark mode' }}</span>
-            </button>
-            <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-left" @click="showShortcuts = true">
-              <Keyboard class="w-5 h-5" /><span>Keyboard Shortcuts</span>
-            </button>
-            <a href="#/" class="flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-foreground" @click.prevent="$emit('close')">
-              <HelpCircle class="w-5 h-5" /><span>Help</span>
-            </a>
-            <a href="#/" class="flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-foreground" @click.prevent="$emit('close')">
-              <MessageSquare class="w-5 h-5" /><span>Feedback</span>
-            </a>
-            <a href="#/admin/knowledge" class="flex items-center gap-3 px-3 py-2.5 rounded-none hover:bg-muted text-foreground" @click="$emit('close')">
-              <BookOpen class="w-5 h-5" /><span>Knowledge Base</span>
-            </a>
-          </nav>
+          <!-- Menu Items -->
+          <div class="flex-1 overflow-y-auto bg-sidebar">
+            <nav class="p-4 space-y-2">
+              <button @click="goHome" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-all text-left group relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <Home class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Home</span>
+              </button>
+
+              <!-- Change Branch -->
+              <div class="relative">
+                <button @click="branchOpen = !branchOpen" class="w-full flex items-center justify-between px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                  <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                  <div class="flex items-center gap-4 min-w-0">
+                    <Building2 class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    <span class="text-lg font-bold text-sidebar-foreground truncate">{{ currentBranch }}</span>
+                  </div>
+                  <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200 shrink-0" :class="branchOpen ? 'rotate-180' : ''" />
+                </button>
+                <div v-if="branchOpen" class="overflow-hidden bg-sidebar-accent/50 border-y border-sidebar-border">
+                  <button v-for="b in branches" :key="b" @click="selectBranch(b)"
+                    class="w-full flex items-center px-14 py-3 hover:bg-sidebar-accent transition-colors text-left text-base"
+                    :class="currentBranch === b ? 'text-primary font-bold' : 'text-muted-foreground hover:text-sidebar-foreground'">
+                    {{ b }}
+                  </button>
+                </div>
+              </div>
+
+              <router-link to="/admin/settings" @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <Settings class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Settings</span>
+              </router-link>
+
+              <div class="h-px bg-sidebar-border mx-4 my-2" />
+
+              <button @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <MessageSquare class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Feedback</span>
+              </button>
+
+              <button @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <BookOpen class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Beginners Guide</span>
+              </button>
+
+              <router-link to="/admin/settings" @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <Sparkles class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Knowledge Base</span>
+              </router-link>
+
+              <button @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <Sparkles class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">What's New</span>
+              </button>
+
+              <div class="h-px bg-sidebar-border mx-4 my-2" />
+
+              <button @click="$emit('close')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <HelpCircle class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Help</span>
+              </button>
+
+              <button @click="showShortcuts = true" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+                <Keyboard class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span class="text-lg font-bold text-sidebar-foreground">Keyboard Shortcuts</span>
+              </button>
+            </nav>
+          </div>
 
           <!-- Footer -->
-          <div class="p-4 border-t border-border space-y-3">
-            <div class="text-xs text-muted-foreground">
-              <div v-if="currentFloat">Float: £{{ currentFloat.amount.toFixed(2) }}</div>
-              <div v-else>No banking session open</div>
+          <div class="border-t border-sidebar-border p-4 space-y-3 bg-sidebar shrink-0">
+            <div v-if="currentFloat" class="bg-card border border-sidebar-border rounded-none p-4 shadow-lg">
+              <div class="text-sm text-muted-foreground mb-1 font-bold uppercase tracking-wider">Current Float</div>
+              <div class="text-lg text-sidebar-foreground font-bold">{{ currentFloat.name }}</div>
             </div>
-            <button class="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-border hover:bg-muted text-sm font-medium" @click="logout">
-              <LogOut class="w-4 h-4" /><span>Sign out</span>
+
+            <button @click="$emit('toggle-theme')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+              <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+              <component :is="theme === 'dark' ? Sun : Moon" class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+              <span class="text-lg font-bold text-sidebar-foreground">{{ theme === 'dark' ? 'Light Mode' : 'Dark Mode' }}</span>
+            </button>
+
+            <button @click="$emit('close-banking')" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-sidebar-accent rounded-none transition-colors text-left group relative">
+              <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+              <DollarSign class="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+              <span class="text-lg font-bold text-sidebar-foreground">Close Banking</span>
+            </button>
+
+            <button @click="logout" class="w-full flex items-center gap-4 px-4 py-4 hover:bg-destructive/10 rounded-none transition-colors text-left group relative">
+              <div class="absolute left-0 top-0 bottom-0 w-1 bg-destructive scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
+              <LogOut class="w-6 h-6 text-muted-foreground group-hover:text-destructive transition-colors" />
+              <span class="text-lg font-bold text-sidebar-foreground group-hover:text-destructive transition-colors">Sign Out</span>
             </button>
           </div>
         </aside>
