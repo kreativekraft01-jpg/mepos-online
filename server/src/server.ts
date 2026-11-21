@@ -323,15 +323,14 @@ if (staticDir) {
   console.log('[server] Serving static from', staticDir)
   // Full store UI (including the AI assistant) is the only app in every mode.
   // The old register never stores business data in the browser and is not built.
-  const entry = path.join(staticDir, 'index.html')
-  const noStore = (_req: import('express').Request, res: import('express').Response) =>
-    res.set('Cache-Control', 'no-store').sendFile(entry)
-  app.get('/', noStore)
-  app.get('/index.html', noStore)
-  app.get('/online.html', noStore)
+  const noStoreFile = (file: string) => (_req: import('express').Request, res: import('express').Response) =>
+    res.set('Cache-Control', 'no-store').sendFile(path.join(staticDir, file))
+  app.get('/', noStoreFile('index.html'))
+  app.get('/index.html', noStoreFile('index.html'))
+  app.get('/online.html', noStoreFile('online.html'))
   app.use(express.static(staticDir))
   // HashRouter needs no rewrite, but handle direct /admin/* etc. fallback to index.html for BrowserRouter safety
-  app.get('*', noStore)
+  app.get('*', noStoreFile('index.html'))
 } else {
   console.log('[server] No static dist found — API only mode. Run `npm run build` in pos-app first.')
   app.get('/', (_req, res) => res.send('MEPoS API running — build frontend with `npm run build` to serve UI'))
