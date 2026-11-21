@@ -1,9 +1,9 @@
 <template>
   <Teleport to="body">
     <Transition enter-active-class="transition duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-      <div v-if="isOpen" class="fixed inset-0 z-[220]">
+      <div v-if="isOpen" class="fixed inset-0" style="z-index: 500;">
         <!-- Success Overlay -->
-        <div v-if="isSuccess" class="fixed inset-0 z-[230] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+        <div v-if="isSuccess" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center" style="z-index: 520;">
           <div class="bg-[#161A1E] border border-primary/50 p-8 rounded-lg flex flex-col items-center gap-6 shadow-[0_0_50px_rgba(6,182,212,0.3)] max-w-sm w-full mx-4">
             <div class="relative">
               <div class="w-20 h-20 rounded-full bg-primary flex items-center justify-center relative z-10">
@@ -20,10 +20,10 @@
         </div>
 
         <!-- Backdrop -->
-        <div class="fixed inset-0 bg-transparent z-[220]" @click="!isSuccess && $emit('close')"></div>
+        <div class="fixed inset-0 bg-transparent" style="z-index: 500;" @click="!isSuccess && $emit('close')"></div>
 
         <!-- Side Sheet -->
-        <div class="fixed right-0 top-0 bottom-0 w-full max-w-xl bg-background border-l border-border shadow-2xl z-[221] flex flex-col" @click.stop>
+        <div class="fixed right-0 top-0 bottom-0 w-full max-w-xl bg-background border-l border-border shadow-2xl flex flex-col" style="z-index: 501;" @click.stop>
           <!-- Header -->
           <div class="flex items-center justify-between p-6 border-b border-border px-[24px] py-[12px]">
             <h2 class="text-xl font-bold text-foreground uppercase tracking-wider">Payment Due</h2>
