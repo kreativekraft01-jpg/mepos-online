@@ -165,7 +165,7 @@
     />
 
     <ScreenSaver
-      v-if="showScreenSaver && !showOpenBanking"
+      v-if="showScreenSaver"
       :branch-name="currentFloat?.name || 'MEPOS'"
       @navigate="handleScreenSaverNavigate"
     />
@@ -234,7 +234,7 @@ const selectedCustomer = ref<CustomerResult | null>(null)
 const profileCustomer = ref<CustomerResult | null>(null)
 const profileReturnTo = ref<'home' | 'customer-listing' | 'cart' | 'gift-voucher'>('home')
 const showNewCustomerModal = ref(false)
-const showScreenSaver = ref(false)
+const showScreenSaver = ref(true)
 
 const currentFloat = ref<{ amount: number; name: string } | null>(null)
 const cartItems = ref<TransactionItem[]>([])
@@ -536,15 +536,16 @@ function handleCloseBankingComplete() {
 // screensaver after inactivity
 let idleTimer: any = null
 function resetIdle() {
-  if (showScreenSaver.value) return
   clearTimeout(idleTimer)
-  idleTimer = setTimeout(() => { if (!showOpenBanking.value) showScreenSaver.value = true }, 5 * 60 * 1000)
+  if (showScreenSaver.value) return
+  idleTimer = setTimeout(() => { if (!showOpenBanking.value) showScreenSaver.value = true }, 60 * 1000)
 }
 function handleScreenSaverNavigate(target: 'home' | 'cart') {
   showScreenSaver.value = false
   currentPage.value = target === 'cart' ? 'cart' : 'home'
   resetIdle()
 }
+watch(showScreenSaver, (v) => { if (!v) resetIdle() })
 onMounted(() => {
   const events = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll']
   events.forEach((e) => window.addEventListener(e, resetIdle))
