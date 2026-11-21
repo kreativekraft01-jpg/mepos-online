@@ -166,13 +166,13 @@
       </div>
     </div>
 
-    <Toaster position="top-right" :theme="theme" rich-colors />
+    <!-- Toaster is mounted once at root App.vue -->
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { toast, Toaster } from 'vue-sonner'
+import { toast } from 'vue-sonner'
 import { Lock, X, Check } from 'lucide-vue-next'
 import confetti from 'canvas-confetti'
 

@@ -1,9 +1,9 @@
 <template>
   <Teleport to="body">
     <Transition enter-active-class="transition duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-      <div v-if="isOpen" class="fixed inset-0 z-50">
+      <div v-if="isOpen" class="fixed inset-0 z-[200]">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="$emit('close')"></div>
-        <aside class="absolute left-0 top-0 bottom-0 w-[340px] bg-card border-r border-border shadow-2xl flex flex-col">
+        <aside class="absolute left-0 top-0 bottom-0 w-[340px] max-w-[90vw] bg-card border-r border-border shadow-2xl flex flex-col overflow-hidden">
           <!-- Header -->
           <div class="p-4 border-b border-border">
             <div class="flex items-center justify-between mb-3">
@@ -25,7 +25,7 @@
                 <span class="truncate">{{ currentBranch }}</span>
                 <ChevronDown class="w-4 h-4 text-muted-foreground" :class="branchOpen ? 'rotate-180' : ''" />
               </button>
-              <div v-if="branchOpen" class="absolute z-10 mt-1 w-full bg-card border border-border shadow-xl max-h-48 overflow-auto">
+              <div v-if="branchOpen" class="absolute z-20 mt-1 w-full bg-card border border-border shadow-xl max-h-48 overflow-auto">
                 <button v-for="b in branches" :key="b" @click="selectBranch(b)" class="w-full text-left px-3 py-2 text-sm hover:bg-muted" :class="b === currentBranch ? 'text-primary' : ''">
                   {{ b }}
                 </button>

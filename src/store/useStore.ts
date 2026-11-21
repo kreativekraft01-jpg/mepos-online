@@ -593,10 +593,15 @@ export const useStore = createCompatStore<POSState>((set, get) => ({
         return { ok: true }
       },
 
-      pushToast: (type, message) =>
-        set((st) => ({
-          toasts: [...st.toasts.slice(-3), { id: uid(), type, message }]
-        })),
+      pushToast: (type, message) => {
+        const id = uid()
+        set((st) => ({ toasts: [...st.toasts.slice(-3), { id, type, message }] }))
+        void import('vue-sonner').then(({ toast }) => {
+          const fn = type === 'error' ? toast.error : type === 'success' ? toast.success : toast.message
+          fn(message, { id })
+        }).catch(() => {})
+        setTimeout(() => get().dismissToast(id), 3200)
+      },
 
       dismissToast: (id) => set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })),
 
