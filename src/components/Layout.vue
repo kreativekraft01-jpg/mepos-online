@@ -1,8 +1,8 @@
 <template>
-  <div class="app-shell">
+  <div class="layout">
     <aside class="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-mark">{{ (store.settings.storeName || 'M')[0] }}</div>
+      <div class="brand">
+        <div class="brand-logo">{{ (store.settings.storeName || 'M')[0] }}</div>
         <div>
           <div class="brand-name">{{ store.settings.storeName || 'MEPoS' }}</div>
           <div class="brand-tag">Admin</div>
@@ -27,25 +27,25 @@
       </nav>
 
       <div class="sidebar-footer">
-        <router-link to="/" class="nav-item">
+        <router-link to="/" class="nav-item sidebar-footer-link">
           <ShoppingCart :size="18" />
           <span>Back to POS</span>
         </router-link>
-        <button class="nav-item" @click="logout">
+        <button class="nav-item sidebar-footer-link" @click="logout">
           <LogOut :size="18" />
           <span>Log out ({{ auth.username || 'admin' }})</span>
         </button>
         <div class="sync-status" :data-status="syncStatus">
           <span class="dot" />
-          <span>{{ syncLabel }}</span>
+          <span class="sf-text">{{ syncLabel }}</span>
         </div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div class="topbar-left">
-          <h1 class="page-title">{{ pageTitle }}</h1>
+        <div class="topbar-title">
+          <h1>{{ pageTitle }}</h1>
         </div>
       </header>
       <div class="content">

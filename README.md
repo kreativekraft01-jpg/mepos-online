@@ -22,6 +22,46 @@ MEPoS Online is a Vue + Express + PostgreSQL (Neon) point-of-sale application. T
 - Build: `npm ci --include=dev && npm run build && cd server && npm ci --include=dev && npm run build`
 - Start: `cd server && npm start` (`prisma migrate deploy && node dist/server.js`)
 
+
+## Tech Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser["Browser (Client)"]
+    UI["Vue 3 POS/Admin UI\nPinia + Router"]
+    Sync["ServerSync\nsnapshot hydrate/push\nstatus + retry/coalesce"]
+    Store["In-memory compat store\n(domain actions + snapshot)"]
+    AI["SmartMate AI Assistant\nAiAssistant.vue"]
+    LLM["WebLLM Engine\nWebGPU / local model cache"]
+    UI --> Store
+    Store <--> Sync
+    Store --> AI
+    AI <--> LLM
+  end
+
+  subgraph Server["Node/Express API Server"]
+    Auth["JWT Auth\n/api/auth/*"]
+    State["Snapshot Sync\nGET/PUT /api/client/state"]
+    Online["Online Pilot APIs\n/api/online/*, /api/search"]
+    Prisma["Prisma ORM\nnormalize + atomic transaction"]
+    Auth --> State
+    Auth --> Online
+    State --> Prisma
+    Online --> Prisma
+  end
+
+  subgraph Data["Neon / PostgreSQL"]
+    Tables[("Normalized tables\nCategory, Product, Customer,\nSale/SaleItem, GiftVoucher,\nKnowledgeDoc, AiSkill,\nTill, SavedCart, AppSettings")]
+    Legacy[("Legacy StoreState\nfallback/rollback sync")]
+    Prisma --> Tables
+    Prisma --> Legacy
+  end
+
+  Sync <-->|"Bearer token\nfull snapshot JSON"| State
+  UI -->|"login/session"| Auth
+  AI -.->|"no DB credentials\nbusiness context from\nNeon-loaded snapshot"| Store
+```
+
 ## App Structure & Entry Points
 
 | Entry | Source | Purpose |
@@ -73,6 +113,36 @@ MEPoS Online is a Vue + Express + PostgreSQL (Neon) point-of-sale application. T
 ## AI Tech Stack & Flow (SmartMate)
 
 SmartMate is an in-browser assistant. **Inference runs locally in the browser via WebLLM/WebGPU**; **business context comes from Neon-loaded store snapshot**.
+
+### How SmartMate AI Works
+
+```mermaid
+flowchart TD
+  Q["User asks a question\nin SmartMate chat"] --> S["Build live store snapshot\nfrom in-memory store\n(hydrated from Neon)"]
+  S --> R["Retrieve evidence in parallel"]
+  R --> O["Operational/inventory facts"]
+  R --> C["Catalog/product retrieval\n+ deterministic catalog answers"]
+  R --> K["Knowledge base RAG\n(chunking + BM25-style retrieval)"]
+  R --> U["Customer/sales/skills/banking context"]
+  O --> F["Fuse evidence + score confidence"]
+  C --> F
+  K --> F
+  U --> F
+  F --> D{"High-confidence\ndeterministic answer?"}
+  D -->|Yes| A1["Return authoritative answer\n(catalog/customer/compare/KB/skill)"]
+  D -->|No| P["Build grounded prompt\nwith retrieved evidence"]
+  P --> L["WebLLM in browser\nWebGPU, local model cache"]
+  L --> V["Validate/ground response\nreject unsupported claims"]
+  V --> A2["Stream answer to user"]
+  A1 --> UI["Show response in chat"]
+  A2 --> UI
+  UI --> X{"Product action?"}
+  X -->|Add to cart| E["Emit mepos:assistant-add-to-cart\nApp.vue adds via store/cart flow"]
+  X -->|No| Done["Done"]
+  E --> Done
+```
+
+
 
 ### AI Components
 - `src/components/AiAssistant.vue` - chat UI, streaming/status, stop/clear, add-to-cart action.
