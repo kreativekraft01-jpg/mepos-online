@@ -1,5 +1,5 @@
 import type { Product, Customer, Sale, Category, CartItem, Till } from '@/types'
-import type { CustomerResult, BoxResult, OrderResult } from '../components/SearchResults'
+import type { CustomerResult, BoxResult, OrderResult } from '../components/SearchResultsTypes'
 import type { Transaction, TransactionItem, OrderType } from '../types'
 
 /** Convert a MEPoS UI transaction item into a store cart row. */

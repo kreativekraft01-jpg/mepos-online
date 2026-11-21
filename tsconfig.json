@@ -21,15 +21,21 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
   "include": [
-    "src"
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.d.ts"
   ],
   "exclude": [
+    "src/**/*.tsx",
+    "src/_legacy_react/**",
     "src/utils/test-*.ts",
-    "src/utils/repro-*.ts"
+    "src/utils/repro-*.ts",
+    "node_modules",
+    "dist"
   ]
 }

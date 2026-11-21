@@ -1,7 +1,5 @@
-import { useCallback } from 'react';
-
 export function useSound() {
-  const playBeep = useCallback(() => {
+  const playBeep = () => {
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -31,9 +29,9 @@ export function useSound() {
     } catch (e) {
       console.error('Audio playback failed', e);
     }
-  }, []);
+  };
 
-  const playSuccess = useCallback(() => {
+  const playSuccess = () => {
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -66,7 +64,7 @@ export function useSound() {
     } catch (e) {
       console.error('Audio playback failed', e);
     }
-  }, []);
+  };
 
   return { playBeep, playSuccess };
 }

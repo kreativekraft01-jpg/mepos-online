@@ -1,5 +1,4 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { reactive } from 'vue'
 import {
   loadBrowserModel,
   browserChat,
@@ -23,73 +22,94 @@ interface BrowserAiState {
   reset: () => void
 }
 
+const STORAGE_KEY = 'mepos-browser-ai'
+
+function readDownloadedModels(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    const data = parsed?.state ?? parsed
+    const list = data?.downloadedModels
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeDownloadedModels(downloadedModels: string[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { downloadedModels } }))
+  } catch {}
+}
+
 /** True when the given model has been loaded before, so we can say "load from cache" instead of "download". */
 export function isModelCached(modelId: string, downloadedModels: string[]): boolean {
   const n = normalizeModelId(modelId)
   return downloadedModels.includes(n)
 }
 
-export const useBrowserAi = create<BrowserAiState>()(
-  persist(
-    (set, get) => ({
-      status: isWebGpuSupported() ? 'idle' : 'unsupported',
-      progress: 0,
-      message: '',
-      error: '',
-      modelId: null,
-      downloadedModels: [],
+function createState(): BrowserAiState {
+  const state = reactive<BrowserAiState>({
+    status: isWebGpuSupported() ? 'idle' : 'unsupported',
+    progress: 0,
+    message: '',
+    error: '',
+    modelId: null,
+    downloadedModels: readDownloadedModels(),
 
-      startLoad: async (modelId) => {
-        const st = get()
-        if (st.status === 'ready' && st.modelId === modelId) return
-        if (st.status === 'loading') return
+    async startLoad(modelId: string) {
+      if (state.status === 'ready' && state.modelId === modelId) return
+      if (state.status === 'loading') return
 
-        const cached = isModelCached(modelId, st.downloadedModels)
-        set({
-          status: 'loading',
-          progress: 0,
-          message: cached ? 'Loading model from cache…' : 'Downloading model… (first time, keep this tab open)',
-          error: '',
-          modelId
+      const cached = isModelCached(modelId, state.downloadedModels)
+      state.status = 'loading'
+      state.progress = 0
+      state.message = cached ? 'Loading model from cache…' : 'Downloading model… (first time, keep this tab open)'
+      state.error = ''
+      state.modelId = modelId
+
+      try {
+        await loadBrowserModel(modelId, (p, text) => {
+          const t = text || ''
+          const pct = Math.max(0, Math.min(100, Math.round(p * 100)))
+          state.progress = pct
+          state.message = t.length > 100 ? `${t.slice(0, 100)}…` : t
         })
-
-        try {
-          await loadBrowserModel(modelId, (p, text) => {
-            const t = text || ''
-            const pct = Math.max(0, Math.min(100, Math.round(p * 100)))
-            set({ progress: pct, message: t.length > 100 ? `${t.slice(0, 100)}…` : t })
-          })
-          set((s) => ({
-            status: 'ready',
-            progress: 100,
-            message: 'Model ready',
-            error: '',
-            downloadedModels: s.downloadedModels.includes(normalizeModelId(modelId))
-              ? s.downloadedModels
-              : [...s.downloadedModels, normalizeModelId(modelId)]
-          }))
-        } catch (err) {
-          set({ status: 'error', progress: 0, message: '', error: (err as Error).message })
+        state.status = 'ready'
+        state.progress = 100
+        state.message = 'Model ready'
+        state.error = ''
+        const n = normalizeModelId(modelId)
+        if (!state.downloadedModels.includes(n)) {
+          state.downloadedModels = [...state.downloadedModels, n]
+          writeDownloadedModels(state.downloadedModels)
         }
-      },
+      } catch (err) {
+        state.status = 'error'
+        state.progress = 0
+        state.message = ''
+        state.error = (err as Error).message
+      }
+    },
 
-      chat: async (modelId, messages, opts) => {
-        return browserChat(modelId, messages, opts)
-      },
+    async chat(modelId: string, messages: AiMessage[], opts?: { signal?: AbortSignal; onProgress?: (text: string) => void }) {
+      return browserChat(modelId, messages, opts)
+    },
 
-      reset: () =>
-        set({
-          status: isWebGpuSupported() ? 'idle' : 'unsupported',
-          progress: 0,
-          message: '',
-          error: '',
-          modelId: null
-        })
-    }),
-    {
-      name: 'mepos-browser-ai',
-      // Only the cache-records survive a page reload; runtime status/engine are in memory.
-      partialize: (s) => ({ downloadedModels: s.downloadedModels })
+    reset() {
+      state.status = isWebGpuSupported() ? 'idle' : 'unsupported'
+      state.progress = 0
+      state.message = ''
+      state.error = ''
+      state.modelId = null
     }
-  )
-)
+  })
+  return state
+}
+
+const singleton = createState()
+export function useBrowserAi() {
+  return singleton
+}
+

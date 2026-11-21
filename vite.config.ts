@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   base: './',
   plugins: [
-    react(),
+    vue(),
     tailwindcss(),
   ],
   resolve: {
@@ -20,12 +20,14 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: { legacy: 'index.html' },
+      input: {
+        main: 'index.html',
+        online: 'online.html',
+      },
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+          vendor: ['vue', 'vue-router', 'pinia'],
           'web-llm': ['@mlc-ai/web-llm'],
-          'motion': ['motion', 'framer-motion']
         }
       }
     }

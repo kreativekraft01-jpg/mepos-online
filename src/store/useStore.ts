@@ -1,5 +1,5 @@
 import { transactionFigures, todaysTransactions } from '../utils/figures'
-import { create } from 'zustand'
+import { createCompatStore } from './createCompatStore'
 import type { Category, Product, Customer, Sale, Settings, Toast, CartItem, SavedCart, PaymentSplit, KnowledgeDoc, AiSkill, BankingContext, Till, GiftVoucher } from '../types'
 import { uid, tillExpectedCash, formatMoney } from '../utils/format'
 import { DEFAULT_BROWSER_MODEL } from '../utils/browserLlm'
@@ -99,7 +99,7 @@ export function nextReceiptNo(sales: Sale[]): string {
 
 // Neon is authoritative: the browser store starts empty and is populated only
 // from GET /api/client/state after login. No zustand persist, no seed fallback.
-export const useStore = create<POSState>()((set, get) => ({
+export const useStore = createCompatStore<POSState>((set, get) => ({
       ready: false,
       categories: [],
       products: [],

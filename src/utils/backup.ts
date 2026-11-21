@@ -1,5 +1,4 @@
-import { useStore, DEFAULT_SETTINGS } from '../store/useStore'
-import { STORE_VERSION } from '../store/useStore'
+import { useStore, DEFAULT_SETTINGS, STORE_VERSION } from '../store/useStore'
 
 export interface BackupPayload {
   app: string

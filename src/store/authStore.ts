@@ -1,5 +1,4 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { reactive } from 'vue'
 
 interface AuthState {
   token: string | null
@@ -8,20 +7,66 @@ interface AuthState {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      username: null,
-      setAuth: (token, username) => set({ token, username }),
-      logout: () => set({ token: null, username: null }),
-    }),
-    {
-      name: 'mepos-auth',
-      storage: createJSONStorage(() => sessionStorage),
+const STORAGE_KEY = 'mepos-auth'
+
+function readPersisted(): { token: string | null; username: string | null } {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return { token: null, username: null }
+    const parsed = JSON.parse(raw)
+    const state = parsed?.state ?? parsed
+    return {
+      token: typeof state?.token === 'string' ? state.token : null,
+      username: typeof state?.username === 'string' ? state.username : null,
     }
-  )
-)
+  } catch {
+    return { token: null, username: null }
+  }
+}
+
+function writePersisted(token: string | null, username: string | null) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ state: { token, username } }))
+  } catch {}
+}
+
+const listeners = new Set<(state: AuthState, prev: AuthState) => void>()
+
+const persisted = readPersisted()
+
+export const authState = reactive<AuthState>({
+  token: persisted.token,
+  username: persisted.username,
+  setAuth(token, username) {
+    const prev = { token: authState.token, username: authState.username } as AuthState
+    authState.token = token
+    authState.username = username
+    writePersisted(token, username)
+    for (const l of listeners) l(authState, prev)
+  },
+  logout() {
+    const prev = { token: authState.token, username: authState.username } as AuthState
+    authState.token = null
+    authState.username = null
+    writePersisted(null, null)
+    for (const l of listeners) l(authState, prev)
+  },
+})
+
+function getState() {
+  return authState
+}
+
+export const useAuthStore = Object.assign((() => authState) as (() => AuthState) & {
+  getState: () => AuthState
+  subscribe: (listener: (state: AuthState, prev: AuthState) => void) => () => void
+}, {
+  getState,
+  subscribe(listener: (state: AuthState, prev: AuthState) => void) {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  },
+})
 
 // Clear any legacy localStorage token (previous persist used localStorage) — force re-login
 if (typeof window !== 'undefined') {
@@ -35,19 +80,19 @@ export function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-export async function loginRequest(username: string, password: string): Promise<{ ok: boolean; token?: string; error?: string }> {
-  const API = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL || ''
-  const url = `${API}/api/auth/login`.replace('//api', '/api')
+export async function loginRequest(
+  username: string,
+  password: string
+): Promise<{ ok: boolean; error?: string; token?: string }> {
   try {
-    const res = await fetch(url, {
+    const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: (data as { error?: string }).error || 'Login failed' }
-    const token = (data as { token?: string }).token
-    if (!token) return { ok: false, error: 'No token returned' }
+    const data = await res.json()
+    if (!res.ok) return { ok: false, error: data.error || 'Login failed' }
+    const token = data.token as string
     useAuthStore.getState().setAuth(token, username)
     return { ok: true, token }
   } catch (e) {
@@ -58,11 +103,13 @@ export async function loginRequest(username: string, password: string): Promise<
 export async function verifyToken(): Promise<boolean> {
   const token = useAuthStore.getState().token
   if (!token) return false
-  const API = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL || ''
-  const url = `${API}/api/auth/me`.replace('//api', '/api')
   try {
-    const res = await fetch(url, { headers: authHeaders() })
-    return res.ok
+    const res = await fetch('/api/auth/me', { headers: authHeaders() })
+    if (!res.ok) {
+      useAuthStore.getState().logout()
+      return false
+    }
+    return true
   } catch {
     return false
   }
