@@ -3,7 +3,7 @@
     <Transition enter-active-class="transition duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
       <div v-if="isOpen" class="fixed inset-0 z-[200]">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="$emit('close')"></div>
-        <aside class="absolute left-0 top-0 bottom-0 w-[340px] max-w-[90vw] bg-card border-r border-border shadow-2xl flex flex-col overflow-hidden">
+        <aside class="absolute left-0 top-0 bottom-0 w-[340px] max-w-[90vw] bg-card border-r border-border shadow-2xl flex flex-col">
           <!-- Header -->
           <div class="p-4 border-b border-border">
             <div class="flex items-center justify-between mb-3">
