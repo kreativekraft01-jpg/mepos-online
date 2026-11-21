@@ -51,42 +51,20 @@
           @donate="toast.info('Donate')"
         />
 
-        <div v-else-if="currentPage === 'cart'" class="fixed inset-0 z-[60] flex flex-col bg-background">
-          <TopNavigation
-            :current-float="currentFloat"
-            :customers="customerResults"
-            :boxes="boxResults"
-            :orders="orderResults"
-            :is-cart-page="true"
-            :is-customer-search-active="isCustomerSearchActive"
-            @open-sidebar="isSidebarOpen = true"
-            @add-customer="showNewCustomerModal = true"
-            @recent-transactions="showHistory = true"
-            @cart="openCart()"
-            @change-float="handleCloseBankingSidebar"
-            @new-transaction="handleNewTransaction"
-            @logo-click="currentPage = 'home'"
-            @deactivate-customer-search="isCustomerSearchActive = false"
-            @add-to-current-transaction="handleAddToCurrentTransaction"
-            @add-to-new-transaction="handleAddToNewTransaction"
-            @attach-customer="handleAttachCustomer"
-            @view-customer="handleViewCustomer"
-            @view-all-customers="handleViewAllCustomers"
-          />
-          <CartPage
-            :key="`cart-${cartInstance}-${restoredCartTs}`"
-            :initial-items="cartItems"
-            :pending-cart-item="pendingCartItem"
-            :selected-customer="selectedCustomer"
-            @back="currentPage = 'home'"
-            @activate-customer-search="isCustomerSearchActive = true"
-            @update:pending-cart-item="(v:any) => pendingCartItem = v"
-            @attach-customer="handleAttachCustomer"
-            @transaction-complete="handleTransactionComplete"
-            @save-transaction="handleSaveCart"
-            @items-change="(v:any) => cartItems = v"
-          />
-        </div>
+        <CartPage
+          v-else-if="currentPage === 'cart'"
+          :key="`cart-${cartInstance}-${restoredCartTs}`"
+          :initial-items="cartItems"
+          :pending-cart-item="pendingCartItem"
+          :selected-customer="selectedCustomer"
+          @back="currentPage = 'home'"
+          @activate-customer-search="isCustomerSearchActive = true"
+          @update:pending-cart-item="(v:any) => pendingCartItem = v"
+          @attach-customer="handleAttachCustomer"
+          @transaction-complete="handleTransactionComplete"
+          @save-transaction="handleSaveCart"
+          @items-change="(v:any) => cartItems = v"
+        />
 
         <CustomerListing
           v-else-if="currentPage === 'customer-listing'"
