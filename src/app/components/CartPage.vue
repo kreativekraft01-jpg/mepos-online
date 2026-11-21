@@ -69,7 +69,7 @@
       </div>
 
       <!-- Footer -->
-      <div :class="['fixed bottom-0 left-0 bg-card border-t border-border px-6 py-2 z-30 w-full transition-all duration-300', showPaymentDue ? 'pr-[37.5rem]' : '']">
+      <div v-if="!showPaymentDue" class="fixed bottom-0 left-0 bg-card border-t border-border px-6 py-2 z-30 w-full transition-all duration-300">
         <div class="flex items-center justify-between max-w-full mx-auto gap-8">
           <div v-if="items.length > 0" class="flex gap-8">
             <div>
@@ -96,7 +96,7 @@
           </div>
           <div v-else></div>
 
-          <button v-if="!showPaymentDue" :disabled="ctaState.disabled" @click="showPaymentDue = true" class="ml-auto px-8 py-2 bg-primary hover:brightness-110 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-none text-lg font-semibold transition-colors whitespace-nowrap hover:scale-[1.01] active:scale-[0.99] flex items-center gap-3">
+          <button :disabled="ctaState.disabled" @click="showPaymentDue = true" class="ml-auto px-8 py-2 bg-primary hover:brightness-110 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-primary-foreground rounded-none text-lg font-semibold transition-colors whitespace-nowrap hover:scale-[1.01] active:scale-[0.99] flex items-center gap-3">
             {{ ctaState.text }}
             <kbd v-if="!ctaState.disabled" class="px-2 py-1 bg-black/20 border border-primary-foreground/20 text-xs font-mono text-primary-foreground font-semibold shadow-sm">Enter</kbd>
           </button>
