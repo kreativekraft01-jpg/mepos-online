@@ -60,34 +60,118 @@
     </div>
 
     <div class="card">
-      <div class="card-header"><h3>Knowledge base</h3><span class="sub">Docs used by the assistant</span></div>
+      <div class="card-header">
+        <div>
+          <h3>Knowledge base</h3>
+          <div class="sub">Docs used by the assistant</div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" @click="openNewKnowledge">
+          <Plus :size="14" /> Add document
+        </button>
+      </div>
       <div class="card-body">
         <div v-if="(store.knowledge || []).length === 0" style="color:var(--text-faint);font-size:13px">No knowledge documents loaded.</div>
-        <div v-else class="simple-list">
+        <div v-else class="simple-list" style="border:1px solid var(--border);border-radius:12px">
           <div v-for="k in store.knowledge" :key="k.id" class="sl-row">
             <div class="sl-info">
               <div class="sl-name">{{ k.title }}</div>
-              <div class="sl-sub">{{ (k.content || '').slice(0, 80) }}{{ (k.content||'').length>80?'…':'' }}</div>
+              <div class="sl-sub">{{ (k.content || '').slice(0, 100) }}{{ (k.content||'').length>100?'…':'' }}</div>
+            </div>
+            <div style="display:inline-flex;gap:6px;flex-shrink:0">
+              <button class="btn-icon btn-ghost" title="Edit" @click="openEditKnowledge(k)"><Pencil :size="15" /></button>
+              <button class="btn-icon btn-ghost" style="color:var(--danger)" title="Delete" @click="deletingKnowledge = k"><Trash2 :size="15" /></button>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <Modal :open="knowledgeOpen" :title="editingKnowledgeId ? 'Edit knowledge document' : 'Add knowledge document'" :wide="true" @close="knowledgeOpen = false">
+      <div v-if="knowledgeError" style="background:var(--danger-soft);color:#b91c1c;padding:10px 14px;border-radius:10px;margin-bottom:14px;font-size:13px;font-weight:600">{{ knowledgeError }}</div>
+      <div class="field">
+        <label>Title <span class="req">*</span></label>
+        <input class="input" v-model="knowledgeForm.title" placeholder="e.g. Return policy" />
+      </div>
+      <div class="field">
+        <label>Content <span class="req">*</span></label>
+        <textarea class="textarea" v-model="knowledgeForm.content" rows="10" placeholder="Information the assistant can use to answer questions" style="min-height:220px"></textarea>
+      </div>
+      <template #footer>
+        <button class="btn btn-ghost" @click="knowledgeOpen = false">Cancel</button>
+        <button class="btn btn-primary" @click="saveKnowledge">{{ editingKnowledgeId ? 'Save changes' : 'Add document' }}</button>
+      </template>
+    </Modal>
+
+    <ConfirmDialog
+      :open="!!deletingKnowledge"
+      title="Delete knowledge document"
+      :message="`Delete &quot;${deletingKnowledge?.title ?? ''}&quot;? This cannot be undone.`"
+      @cancel="deletingKnowledge = null"
+      @confirm="confirmDeleteKnowledge"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
-import { Save, Download, Upload, Cpu } from 'lucide-vue-next'
+import { reactive, ref } from 'vue'
+import { Save, Download, Upload, Cpu, Plus, Pencil, Trash2 } from 'lucide-vue-next'
 import { useStore, DEFAULT_SETTINGS } from '../store/useStore'
 import { useBrowserAi, isModelCached } from '../store/browserAi'
 import { BROWSER_MODELS, isWebGpuSupported, normalizeModelId } from '../utils/browserLlm'
 import { downloadBackup, restoreFromFile } from '../utils/backup'
+import Modal from '../components/Modal.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import type { KnowledgeDoc } from '../types'
 
 const store = useStore()
 const ai = useBrowserAi()
 const models = BROWSER_MODELS
 const webgpu = isWebGpuSupported()
+
+const knowledgeOpen = ref(false)
+const editingKnowledgeId = ref<string | null>(null)
+const deletingKnowledge = ref<KnowledgeDoc | null>(null)
+const knowledgeError = ref('')
+const knowledgeForm = reactive({ title: '', content: '' })
+
+function openNewKnowledge() {
+  editingKnowledgeId.value = null
+  knowledgeForm.title = ''
+  knowledgeForm.content = ''
+  knowledgeError.value = ''
+  knowledgeOpen.value = true
+}
+
+function openEditKnowledge(doc: KnowledgeDoc) {
+  editingKnowledgeId.value = doc.id
+  knowledgeForm.title = doc.title
+  knowledgeForm.content = doc.content
+  knowledgeError.value = ''
+  knowledgeOpen.value = true
+}
+
+function saveKnowledge() {
+  knowledgeError.value = ''
+  const title = knowledgeForm.title.trim()
+  const content = knowledgeForm.content.trim()
+  if (!title) { knowledgeError.value = 'Title is required'; return }
+  if (!content) { knowledgeError.value = 'Content is required'; return }
+  if (editingKnowledgeId.value) {
+    store.updateKnowledgeDoc(editingKnowledgeId.value, { title, content })
+    store.pushToast('success', 'Knowledge document updated')
+  } else {
+    store.addKnowledgeDoc(title, content)
+    store.pushToast('success', 'Knowledge document added')
+  }
+  knowledgeOpen.value = false
+}
+
+function confirmDeleteKnowledge() {
+  if (!deletingKnowledge.value) return
+  store.deleteKnowledgeDoc(deletingKnowledge.value.id)
+  store.pushToast('success', 'Knowledge document deleted')
+  deletingKnowledge.value = null
+}
 
 const form = reactive({
   storeName: store.settings.storeName,
