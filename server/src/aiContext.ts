@@ -17,15 +17,11 @@ function tokenize(text: string): string[] {
 }
 
 function looksLikeCustomerQuestion(q: string): boolean {
-  return /\b(customer|customers|client|buyer|purchase history|bought|spent|owe|credit|balance|loyalty|contact|email|phone)\b/i.test(q)
+  return /\b(customer|customers|client|clients|buyer|buyers|purchase history|bought|spent|spend|owe|owes|credit|balance|loyalty|contact|email|phone|who bought|top customer|repeat customer)\b/i.test(q)
 }
 
 function looksLikeSalesQuestion(q: string): boolean {
-  return /\b(sales?|revenue|sold|orders?|refunds?|buy|exchange|banking|variance|cash|till|today|yesterday|week|month|year|transactions?|top seller|best seller)\b/i.test(q)
-}
-
-function looksLikeInventoryQuestion(q: string): boolean {
-  return /\b(stock|inventory|low stock|out of stock|how many|count|catalog|product|products|item|items|price|cost|grade|category|categories|available|do we have|have we got)\b/i.test(q)
+  return /\b(sales?|revenue|sold|orders?|refunds?|refund|buy|buys|exchange|exchanges|banking|variance|cash|till|today|yesterday|week|month|year|transactions?|top seller|best seller|earnings|turnover|profit|how much did we make)\b/i.test(q)
 }
 
 function startOfToday() {
@@ -39,22 +35,18 @@ async function buildSnapshot(db: PrismaClient, settings: Obj) {
   const [productCount, inStockRows, lowStockRows, customerAgg, sales, topItem] = await Promise.all([
     db.product.count(),
     db.product.findMany({ select: { name: true, grade: true, stock: true } }),
-    db.product.findMany({
-      where: { stock: { lte: db.product.fields?.lowStockThreshold as any } } as any, // fallback below
-      select: { name: true, stock: true, lowStockThreshold: true },
-      orderBy: [{ stock: 'asc' }, { name: 'asc' }],
-      take: 20,
-    }).catch(async () => {
-      const rows = await db.product.findMany({ select: { name: true, stock: true, lowStockThreshold: true } })
-      return rows.filter((r) => r.stock <= r.lowStockThreshold).sort((a, b) => a.stock - b.stock).slice(0, 20)
-    }),
+    db.product.findMany({ select: { name: true, stock: true, lowStockThreshold: true } }),
     db.customer.aggregate({ _count: { _all: true }, _sum: { balance: true } }),
     db.sale.findMany({ select: { kind: true, total: true, createdAt: true } }),
     db.saleItem.groupBy({ by: ['productId'], _sum: { qty: true }, orderBy: { _sum: { qty: 'desc' } }, take: 1 }).catch(() => []),
   ])
 
   const catalog = inStockRows.map((p) => ({ name: p.name, grade: String(p.grade || ''), stock: p.stock }))
-  const lowStock = lowStockRows.map((p) => ({ name: p.name, stock: p.stock }))
+  const lowStock = lowStockRows
+    .filter((r) => r.stock <= r.lowStockThreshold)
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 20)
+    .map((p) => ({ name: p.name, stock: p.stock }))
 
   const sum = (rows: any[], kind?: string) => rows.filter((s) => !kind || s.kind === kind).reduce((a, s) => a + Math.abs(Number(s.total) || 0), 0)
   const count = (rows: any[], kind: string) => rows.filter((s) => s.kind === kind).length
@@ -90,10 +82,9 @@ async function buildSnapshot(db: PrismaClient, settings: Obj) {
 export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
   const question = String(req.question || '').trim().slice(0, 500)
   const attachedCustomerId = typeof req.attachedCustomerId === 'string' ? req.attachedCustomerId : null
-  const tokens = tokenize(question).slice(0, 8)
+  const tokens = tokenize(question).slice(0, 10)
   const customerQ = looksLikeCustomerQuestion(question) || !!attachedCustomerId
   const salesQ = looksLikeSalesQuestion(question)
-  const inventoryQ = looksLikeInventoryQuestion(question) || (!customerQ && !salesQ)
 
   const settingsRow = await db.appSettings.findUnique({ where: { id: 'singleton' } })
   const settings = {
@@ -105,21 +96,11 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
     skillsEnabled: Boolean(settingsRow?.skillsEnabled ?? true),
   }
 
-  const productWhere = tokens.length
-    ? { OR: tokens.flatMap((t) => [
-        { name: { contains: t, mode: 'insensitive' as const } },
-        { sku: { contains: t, mode: 'insensitive' as const } },
-        { description: { contains: t, mode: 'insensitive' as const } },
-        { category: { name: { contains: t, mode: 'insensitive' as const } } },
-      ]) }
-    : undefined
-
+  // For AI correctness, include full product/category catalog (capped). Scoped subsets caused hallucinations/misses.
   const [snapshot, categories, products, knowledge, skills, customers, salesRaw] = await Promise.all([
     buildSnapshot(db, settings),
-    db.category.findMany(),
-    inventoryQ || tokens.length
-      ? db.product.findMany({ where: productWhere, take: 300, orderBy: [{ stock: 'desc' }, { name: 'asc' }], include: { category: { select: { name: true } } } })
-      : Promise.resolve([]),
+    db.category.findMany({ orderBy: { name: 'asc' } }),
+    db.product.findMany({ take: 2000, orderBy: [{ name: 'asc' }] }),
     settings.kbEnabled ? db.knowledgeDoc.findMany() : Promise.resolve([]),
     settings.skillsEnabled ? db.aiSkill.findMany() : Promise.resolve([]),
     customerQ
@@ -134,24 +115,19 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
               ]),
             ],
           } : undefined,
-          take: 50,
+          take: 100,
           orderBy: [{ name: 'asc' }],
         })
-      : Promise.resolve([]),
+      : db.customer.findMany({ take: 200, orderBy: [{ name: 'asc' }] }),
     salesQ || customerQ
       ? db.sale.findMany({
           where: attachedCustomerId ? { customerId: attachedCustomerId } : undefined,
           include: { items: true },
           orderBy: [{ createdAt: 'desc' }],
-          take: customerQ ? 200 : 500,
+          take: 500,
         })
-      : Promise.resolve([]),
+      : db.sale.findMany({ include: { items: true }, orderBy: [{ createdAt: 'desc' }], take: 200 }),
   ])
-
-  let finalProducts: any[] = products as any[]
-  if (!finalProducts.length) {
-    finalProducts = await db.product.findMany({ take: 150, orderBy: [{ stock: 'desc' }, { name: 'asc' }], include: { category: { select: { name: true } } } })
-  }
 
   const mapSale = (s: any) => ({
     ...s,
@@ -160,24 +136,15 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
     items: (s.items || []).map((it: any) => ({ productId: it.productId, name: it.name, price: it.price, qty: it.qty })),
   })
 
-  const mappedProducts = finalProducts.map((p: any) => {
-    const { category, ...rest } = p
-    return { ...rest, createdAt: toNum(p.createdAt) }
-  })
-  const mappedCustomers = customers.map((c: any) => ({ ...c, createdAt: toNum(c.createdAt) }))
-  const mappedSales = salesRaw.map(mapSale)
-  const mappedKnowledge = knowledge.map((k: any) => ({ ...k, updatedAt: toNum(k.updatedAt) }))
-  const mappedSkills = skills.map((s: any) => ({ ...s, updatedAt: toNum(s.updatedAt) }))
-
   return {
     settings,
     snapshot,
-    products: mappedProducts,
+    products: products.map((p: any) => ({ ...p, createdAt: toNum(p.createdAt) })),
     categories,
-    customers: mappedCustomers,
-    sales: mappedSales,
-    knowledge: mappedKnowledge,
-    skills: mappedSkills,
+    customers: customers.map((c: any) => ({ ...c, createdAt: toNum(c.createdAt) })),
+    sales: salesRaw.map(mapSale),
+    knowledge: knowledge.map((k: any) => ({ ...k, updatedAt: toNum(k.updatedAt) })),
+    skills: skills.map((s: any) => ({ ...s, updatedAt: toNum(s.updatedAt) })),
     bankingContext: req.bankingContext ?? null,
   }
 }
