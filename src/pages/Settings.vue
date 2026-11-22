@@ -29,11 +29,19 @@
         <label style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <input type="checkbox" v-model="form.aiEnabled" /> Enable SmartMate assistant
         </label>
-        <div class="field" style="max-width:420px">
+        <div class="field" style="max-width:420px;margin-bottom:12px">
           <label>Browser model</label>
           <select class="select" v-model="form.browserModel">
             <option v-for="m in models" :key="m.id" :value="m.id">{{ m.label }} ({{ m.size }}){{ isCached(m.id) ? ' · cached' : '' }}</option>
           </select>
+        </div>
+        <div class="field" style="max-width:420px">
+          <label>SmartMate data source</label>
+          <select class="select" v-model="form.aiDataSource">
+            <option value="snapshot">App snapshot (default)</option>
+            <option value="neon">Neon DB (AI answers only)</option>
+          </select>
+          <div style="font-size:12.5px;color:var(--text-faint);margin-top:6px">Neon mode fetches fresh data from Neon for each SmartMate question. POS screens still use the synced app snapshot.</div>
         </div>
         <div v-if="!webgpu" style="margin-top:10px;color:var(--danger);font-size:13px">WebGPU is not supported in this browser. Local model loading may not work.</div>
         <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -181,6 +189,7 @@ const form = reactive({
   receiptFooter: store.settings.receiptFooter,
   aiEnabled: store.settings.aiEnabled,
   browserModel: store.settings.browserModel || DEFAULT_SETTINGS.browserModel,
+  aiDataSource: store.settings.aiDataSource || 'snapshot',
 })
 
 function save() {
@@ -192,6 +201,7 @@ function save() {
     receiptFooter: form.receiptFooter,
     aiEnabled: !!form.aiEnabled,
     browserModel: normalizeModelId(form.browserModel) || DEFAULT_SETTINGS.browserModel,
+    aiDataSource: form.aiDataSource === 'neon' ? 'neon' : 'snapshot',
   })
   store.pushToast('success', 'Settings saved')
 }

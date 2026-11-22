@@ -158,6 +158,8 @@ export const PAYMENT_METHODS: PaymentOption[] = [
   { id: 'voucher', label: 'Voucher', icon: '🎟️' }
 ]
 
+export type AiDataSource = 'snapshot' | 'neon'
+
 export interface Settings {
   storeName: string
   tagline: string
@@ -168,6 +170,7 @@ export interface Settings {
   browserModel: string
   kbEnabled: boolean
   skillsEnabled: boolean
+  aiDataSource: AiDataSource
 }
 
 export interface KnowledgeDoc {

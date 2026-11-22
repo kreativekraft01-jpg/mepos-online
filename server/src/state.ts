@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: Obj = {
   browserModel: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
   kbEnabled: true,
   skillsEnabled: true,
+  aiDataSource: 'snapshot',
 }
 
 export const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -290,6 +291,7 @@ export function normalizeState(input: unknown): NormalizedState {
       browserModel: text(s.browserModel, '') || String(DEFAULT_SETTINGS.browserModel),
       kbEnabled: bool(s.kbEnabled, true),
       skillsEnabled: bool(s.skillsEnabled, true),
+      aiDataSource: text(s.aiDataSource, 'snapshot') === 'neon' ? 'neon' : 'snapshot',
       activeTillId,
     }
   }

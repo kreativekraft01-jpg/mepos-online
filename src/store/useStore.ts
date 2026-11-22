@@ -15,7 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   aiEnabled: true,
   browserModel: DEFAULT_BROWSER_MODEL,
   kbEnabled: true,
-  skillsEnabled: true
+  skillsEnabled: true,
+  aiDataSource: 'snapshot'
 }
 
 interface POSState {

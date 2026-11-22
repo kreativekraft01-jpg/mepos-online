@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import { initializeStore } from './bootstrap.js'
 import { onlineApi } from './online.js'
 import { searchStore } from './search.js'
+import { buildAiContext } from './aiContext.js'
 import { normalizeState, toTableRows } from './state.js'
 
 const app = express()
@@ -111,6 +112,7 @@ async function readStateFromTables(): Promise<Record<string, unknown> | null> {
           browserModel: (settingsRow as Record<string, unknown>).browserModel,
           kbEnabled: (settingsRow as Record<string, unknown>).kbEnabled,
           skillsEnabled: (settingsRow as Record<string, unknown>).skillsEnabled,
+          aiDataSource: (settingsRow as Record<string, unknown>).aiDataSource ?? 'snapshot',
         }
       : undefined,
     activeTillId: (settingsRow as Record<string, unknown> | null)?.activeTillId ?? undefined,
@@ -248,6 +250,25 @@ if (online) {
   })
   app.use('/api/online', authMiddleware, onlineApi(() => prisma))
 }
+
+app.post('/api/ai/context', authMiddleware, async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  const question = req.body?.question
+  if (typeof question !== 'string' || !question.trim() || question.length > 500) {
+    return res.status(400).json({ error: 'Question is required (max 500 characters).' })
+  }
+  const attachedCustomerId = typeof req.body?.attachedCustomerId === 'string' ? req.body.attachedCustomerId : null
+  const bankingContext = req.body?.bankingContext && typeof req.body.bankingContext === 'object' && !Array.isArray(req.body.bankingContext)
+    ? req.body.bankingContext
+    : null
+  try {
+    const ctx = await buildAiContext(prisma, { question: question.trim(), attachedCustomerId, bankingContext })
+    return res.json(ctx)
+  } catch (e) {
+    console.error('[server] Failed to build AI context:', e)
+    return res.status(503).json({ error: 'Neon AI context unavailable.' })
+  }
+})
 
 app.post('/api/search', authMiddleware, async (req, res) => {
   res.set('Cache-Control', 'no-store')

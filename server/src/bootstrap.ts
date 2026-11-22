@@ -44,6 +44,7 @@ export async function initializeStore(db: PrismaClient) {
         browserModel: '',
         kbEnabled: true,
         skillsEnabled: true,
+        aiDataSource: 'snapshot',
         activeTillId: 'front',
       },
     })

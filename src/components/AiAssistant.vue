@@ -108,6 +108,7 @@ import { X, Wifi, WifiOff, Loader2, RefreshCw, Trash2, ArrowUp, Square, ShieldCh
 import AgentX, { type AgentState } from './AgentX.vue'
 import { useStore } from '../store/useStore'
 import { useBrowserAi } from '../store/browserAi'
+import { useAuthStore } from '../store/authStore'
 import {
   buildSnapshot,
   buildAssistantSystemPrompt,
@@ -235,23 +236,73 @@ async function send(text?: string) {
   pendingCorrection.value = undefined
   scrollToBottom()
 
-  const kbEnabled = store.settings.kbEnabled && store.knowledge.length > 0
-  const kbContext = kbEnabled ? buildKnowledgeContext(store.knowledge, resolved) : ''
+  const useNeon = store.settings.aiDataSource === 'neon'
+  let evidence
+  let evidenceSnapshot = snapshot.value
+  let kbContext = ''
+  let kbKnowledge = store.knowledge
+  let kbEnabled = store.settings.kbEnabled && store.knowledge.length > 0
+  let skillsEnabled = store.settings.skillsEnabled
+  let currency = store.settings.currency
+  let contextProducts = store.products
+  let contextCategories = store.categories
 
-  const evidence = retrieveEvidence(resolved, {
-    products: store.products,
-    categories: store.categories,
-    customers: store.customers,
-    sales: store.sales,
-    currency: store.settings.currency,
-    attachedCustomerId: store.customerId,
-    knowledge: store.knowledge,
-    kbEnabled,
-    skills: store.skills,
-    skillsEnabled: store.settings.skillsEnabled,
-    bankingContext: (store as any).bankingContext ?? undefined,
-    snapshot: snapshot.value,
-  })
+  if (useNeon) {
+    const token = useAuthStore.getState().token
+    const res = await fetch('/api/ai/context', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({
+        question: resolved,
+        attachedCustomerId: store.customerId ?? null,
+        bankingContext: (store as any).bankingContext ?? null,
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as any).error || `Neon AI context unavailable (${res.status})`)
+    }
+    const ctx = await res.json()
+    evidenceSnapshot = ctx.snapshot
+    kbKnowledge = ctx.knowledge || []
+    kbEnabled = !!ctx.settings?.kbEnabled && kbKnowledge.length > 0
+    skillsEnabled = !!ctx.settings?.skillsEnabled
+    currency = ctx.settings?.currency || currency
+    contextProducts = ctx.products || []
+    contextCategories = ctx.categories || []
+    kbContext = kbEnabled ? buildKnowledgeContext(kbKnowledge, resolved) : ''
+    evidence = retrieveEvidence(resolved, {
+      products: contextProducts,
+      categories: contextCategories,
+      customers: ctx.customers || [],
+      sales: ctx.sales || [],
+      currency,
+      attachedCustomerId: store.customerId,
+      knowledge: kbKnowledge,
+      kbEnabled,
+      skills: ctx.skills || [],
+      skillsEnabled,
+      bankingContext: ctx.bankingContext ?? (store as any).bankingContext ?? undefined,
+      snapshot: evidenceSnapshot,
+    })
+  } else {
+    kbContext = kbEnabled ? buildKnowledgeContext(store.knowledge, resolved) : ''
+    evidence = retrieveEvidence(resolved, {
+      products: store.products,
+      categories: store.categories,
+      customers: store.customers,
+      sales: store.sales,
+      currency: store.settings.currency,
+      attachedCustomerId: store.customerId,
+      knowledge: store.knowledge,
+      kbEnabled,
+      skills: store.skills,
+      skillsEnabled: store.settings.skillsEnabled,
+      bankingContext: (store as any).bankingContext ?? undefined,
+      snapshot: snapshot.value,
+    })
+  }
 
   const decision = decideAnswer(evidence)
   const answerProducts = decision.winner === 'catalog' || decision.winner === 'compare'
@@ -292,16 +343,16 @@ async function send(text?: string) {
     typing.value = false
     messages.value = [...messages.value, {
       role: 'assistant',
-      content: validateAnswer(offlineReply(resolved, snapshot.value, evidence.customer.ctx ?? undefined, evidence.customer.attachedName, store.settings.kbEnabled ? store.knowledge : [], store.products, store.categories), evidence),
+      content: validateAnswer(offlineReply(resolved, evidenceSnapshot, evidence.customer.ctx ?? undefined, evidence.customer.attachedName, kbEnabled ? kbKnowledge : [], contextProducts, contextCategories), evidence),
     }]
     if (ai.status === 'error') note.value = `The local model failed to load — answered from built-in knowledge. (${ai.error || 'unknown error'})`
     else if (ai.status === 'loading') note.value = 'The model is still loading — answering from built-in knowledge for now.'
     return
   }
 
-  const evidencePrompt = buildEvidencePrompt(evidence, snapshot.value, kbContext, decision.winner)
+  const evidencePrompt = buildEvidencePrompt(evidence, evidenceSnapshot, kbContext, decision.winner)
   const history: AiMessage[] = [
-    { role: 'system', content: buildAssistantSystemPrompt(snapshot.value, kbContext, evidencePrompt, evidence.customer.attachedName, evidence.catalog.hits) },
+    { role: 'system', content: buildAssistantSystemPrompt(evidenceSnapshot, kbContext, evidencePrompt, evidence.customer.attachedName, evidence.catalog.hits) },
     ...messages.value.slice(-12).map(({ role, content }) => ({ role, content })),
     { role: 'user', content: resolved },
   ]
@@ -317,11 +368,16 @@ async function send(text?: string) {
     messages.value = [...messages.value, { role: 'assistant', content: validated }]
   } catch (err) {
     if (controller.signal.aborted) return
-    messages.value = [...messages.value, {
-      role: 'assistant',
-      content: validateAnswer(offlineReply(resolved, snapshot.value, evidence.customer.ctx ?? undefined, evidence.customer.attachedName, store.settings.kbEnabled ? store.knowledge : [], store.products, store.categories), evidence),
-    }]
-    note.value = `Local model error (${(err as Error).message}) — answered from built-in knowledge.`
+    if (useNeon && err instanceof Error && /Neon AI context unavailable|Failed to fetch|NetworkError|Load failed/i.test(err.message)) {
+      messages.value = [...messages.value, { role: 'assistant', content: 'I could not fetch fresh data from Neon right now. Check the connection or switch SmartMate data source to App snapshot in Settings.' }]
+      note.value = err.message
+    } else {
+      messages.value = [...messages.value, {
+        role: 'assistant',
+        content: validateAnswer(offlineReply(resolved, evidenceSnapshot, evidence.customer.ctx ?? undefined, evidence.customer.attachedName, kbEnabled ? kbKnowledge : [], contextProducts, contextCategories), evidence),
+      }]
+      note.value = `Local model error (${(err as Error).message}) — answered from built-in knowledge.`
+    }
   } finally {
     if (activeRequest === controller) {
       activeRequest = null
