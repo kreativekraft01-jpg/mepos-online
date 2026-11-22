@@ -21,57 +21,69 @@ function looksLikeCustomerQuestion(q: string): boolean {
 }
 
 function looksLikeSalesQuestion(q: string): boolean {
-  return /\b(sales?|revenue|sold|orders?|refunds?|buy|exchange|banking|variance|cash|till|today|yesterday|week|month|year|transactions?)\b/i.test(q)
+  return /\b(sales?|revenue|sold|orders?|refunds?|buy|exchange|banking|variance|cash|till|today|yesterday|week|month|year|transactions?|top seller|best seller)\b/i.test(q)
 }
 
-function buildSnapshot(products: Obj[], sales: Obj[], customers: Obj[], settings: Obj) {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const todayStart = start.getTime()
-  const todaySales = sales.filter((s) => toNum(s.createdAt) >= todayStart)
-  const sum = (rows: Obj[], kind?: string) =>
-    rows.filter((s) => !kind || s.kind === kind).reduce((a, s) => a + Math.abs(Number(s.total) || 0), 0)
-  const count = (rows: Obj[], kind: string) => rows.filter((s) => s.kind === kind).length
-  const figures = {
-    sales: sum(todaySales, 'sale'),
-    buys: sum(todaySales, 'buy'),
-    exchange: sum(todaySales, 'exchange'),
-    refunds: sum(todaySales, 'refund'),
-    orders: count(todaySales, 'sale'),
+function looksLikeInventoryQuestion(q: string): boolean {
+  return /\b(stock|inventory|low stock|out of stock|how many|count|catalog|product|products|item|items|price|cost|grade|category|categories|available|do we have|have we got)\b/i.test(q)
+}
+
+function startOfToday() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return BigInt(d.getTime())
+}
+
+async function buildSnapshot(db: PrismaClient, settings: Obj) {
+  const todayStart = startOfToday()
+  const [productCount, inStockRows, lowStockRows, customerAgg, sales, topItem] = await Promise.all([
+    db.product.count(),
+    db.product.findMany({ select: { name: true, grade: true, stock: true } }),
+    db.product.findMany({
+      where: { stock: { lte: db.product.fields?.lowStockThreshold as any } } as any, // fallback below
+      select: { name: true, stock: true, lowStockThreshold: true },
+      orderBy: [{ stock: 'asc' }, { name: 'asc' }],
+      take: 20,
+    }).catch(async () => {
+      const rows = await db.product.findMany({ select: { name: true, stock: true, lowStockThreshold: true } })
+      return rows.filter((r) => r.stock <= r.lowStockThreshold).sort((a, b) => a.stock - b.stock).slice(0, 20)
+    }),
+    db.customer.aggregate({ _count: { _all: true }, _sum: { balance: true } }),
+    db.sale.findMany({ select: { kind: true, total: true, createdAt: true } }),
+    db.saleItem.groupBy({ by: ['productId'], _sum: { qty: true }, orderBy: { _sum: { qty: 'desc' } }, take: 1 }).catch(() => []),
+  ])
+
+  const catalog = inStockRows.map((p) => ({ name: p.name, grade: String(p.grade || ''), stock: p.stock }))
+  const lowStock = lowStockRows.map((p) => ({ name: p.name, stock: p.stock }))
+
+  const sum = (rows: any[], kind?: string) => rows.filter((s) => !kind || s.kind === kind).reduce((a, s) => a + Math.abs(Number(s.total) || 0), 0)
+  const count = (rows: any[], kind: string) => rows.filter((s) => s.kind === kind).length
+  const todaySales = sales.filter((s) => BigInt(toNum(s.createdAt)) >= todayStart)
+  const figures = { sales: sum(todaySales, 'sale'), buys: sum(todaySales, 'buy'), exchange: sum(todaySales, 'exchange'), refunds: sum(todaySales, 'refund'), orders: count(todaySales, 'sale') }
+  const allFigures = { sales: sum(sales, 'sale'), buys: sum(sales, 'buy'), exchange: sum(sales, 'exchange'), refunds: sum(sales, 'refund'), orders: count(sales, 'sale') }
+
+  let topProduct: string | undefined
+  const top = (topItem as any[])[0]
+  if (top?.productId) {
+    const p = await db.product.findUnique({ where: { id: String(top.productId) }, select: { name: true } })
+    topProduct = p?.name
   }
-  const allFigures = {
-    sales: sum(sales, 'sale'),
-    buys: sum(sales, 'buy'),
-    exchange: sum(sales, 'exchange'),
-    refunds: sum(sales, 'refund'),
-    orders: count(sales, 'sale'),
-  }
-  const itemCounts = new Map<string, number>()
-  for (const s of sales.filter((s) => s.kind === 'sale')) {
-    for (const it of ((s.items as Obj[]) || [])) {
-      const pid = String(it.productId || '')
-      itemCounts.set(pid, (itemCounts.get(pid) ?? 0) + (Number(it.qty) || 0))
-    }
-  }
-  const topId = [...itemCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+
   return {
     storeName: String(settings.storeName || ''),
     currency: String(settings.currency || '$'),
     taxRate: Number(settings.taxRate) || 0,
-    productCount: products.length,
-    catalog: products.map((p) => ({ name: String(p.name || ''), grade: String(p.grade || ''), stock: Number(p.stock) || 0 })),
-    lowStock: products
-      .filter((p) => (Number(p.stock) || 0) <= (Number(p.lowStockThreshold) || 0))
-      .map((p) => ({ name: String(p.name || ''), stock: Number(p.stock) || 0 }))
-      .sort((a, b) => a.stock - b.stock),
+    productCount,
+    catalog,
+    lowStock,
     todaySalesCount: figures.orders,
     todayFigures: figures,
     todayRevenue: figures.sales,
     totalSalesCount: allFigures.orders,
     totalRevenue: allFigures.sales,
-    topProduct: topId ? String(products.find((p) => String(p.id) === topId)?.name || '') || undefined : undefined,
-    customerCount: customers.length,
-    creditOutstanding: customers.reduce((s, c) => s + (Number(c.balance) || 0), 0),
+    topProduct,
+    customerCount: customerAgg._count._all,
+    creditOutstanding: Number(customerAgg._sum.balance || 0),
   }
 }
 
@@ -81,6 +93,7 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
   const tokens = tokenize(question).slice(0, 8)
   const customerQ = looksLikeCustomerQuestion(question) || !!attachedCustomerId
   const salesQ = looksLikeSalesQuestion(question)
+  const inventoryQ = looksLikeInventoryQuestion(question) || (!customerQ && !salesQ)
 
   const settingsRow = await db.appSettings.findUnique({ where: { id: 'singleton' } })
   const settings = {
@@ -97,12 +110,16 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
         { name: { contains: t, mode: 'insensitive' as const } },
         { sku: { contains: t, mode: 'insensitive' as const } },
         { description: { contains: t, mode: 'insensitive' as const } },
+        { category: { name: { contains: t, mode: 'insensitive' as const } } },
       ]) }
     : undefined
 
-  const [categories, products, knowledge, skills, customers, salesRaw] = await Promise.all([
+  const [snapshot, categories, products, knowledge, skills, customers, salesRaw] = await Promise.all([
+    buildSnapshot(db, settings),
     db.category.findMany(),
-    db.product.findMany({ where: productWhere, take: 200, orderBy: [{ name: 'asc' }] }),
+    inventoryQ || tokens.length
+      ? db.product.findMany({ where: productWhere, take: 300, orderBy: [{ stock: 'desc' }, { name: 'asc' }], include: { category: { select: { name: true } } } })
+      : Promise.resolve([]),
     settings.kbEnabled ? db.knowledgeDoc.findMany() : Promise.resolve([]),
     settings.skillsEnabled ? db.aiSkill.findMany() : Promise.resolve([]),
     customerQ
@@ -131,14 +148,9 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
       : Promise.resolve([]),
   ])
 
-  // For broad catalog questions with no token matches, provide a capped catalog sample.
-  let finalProducts = products
-  if (!finalProducts.length && !tokens.length) {
-    finalProducts = await db.product.findMany({ take: 200, orderBy: [{ name: 'asc' }] })
-  }
-  if (!finalProducts.length && tokens.length) {
-    // fallback: small sample so assistant can still say what's available
-    finalProducts = await db.product.findMany({ take: 100, orderBy: [{ stock: 'desc' }, { name: 'asc' }] })
+  let finalProducts: any[] = products as any[]
+  if (!finalProducts.length) {
+    finalProducts = await db.product.findMany({ take: 150, orderBy: [{ stock: 'desc' }, { name: 'asc' }], include: { category: { select: { name: true } } } })
   }
 
   const mapSale = (s: any) => ({
@@ -148,13 +160,14 @@ export async function buildAiContext(db: PrismaClient, req: AiContextRequest) {
     items: (s.items || []).map((it: any) => ({ productId: it.productId, name: it.name, price: it.price, qty: it.qty })),
   })
 
-  const mappedProducts = finalProducts.map((p: any) => ({ ...p, createdAt: toNum(p.createdAt) }))
+  const mappedProducts = finalProducts.map((p: any) => {
+    const { category, ...rest } = p
+    return { ...rest, createdAt: toNum(p.createdAt) }
+  })
   const mappedCustomers = customers.map((c: any) => ({ ...c, createdAt: toNum(c.createdAt) }))
   const mappedSales = salesRaw.map(mapSale)
   const mappedKnowledge = knowledge.map((k: any) => ({ ...k, updatedAt: toNum(k.updatedAt) }))
   const mappedSkills = skills.map((s: any) => ({ ...s, updatedAt: toNum(s.updatedAt) }))
-
-  const snapshot = buildSnapshot(mappedProducts as Obj[], mappedSales as Obj[], mappedCustomers as Obj[], settings as Obj)
 
   return {
     settings,
